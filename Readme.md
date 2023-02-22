@@ -1,4 +1,4 @@
-# **Automated g-ratio calculation of sciatic nerve bundles in mice – a new approach for optical microscopy **
+# Automated g-ratio calculation of sciatic nerve bundles in mice – a new approach for optical microscopy
 
 ## **Overview**
 
