@@ -1,8 +1,8 @@
-# Automated g-ratio calculation of sciatic nerve bundles in mice – a new approach for optical microscopy
+# Automated Pipeline for Nerve Fiber Selection and G-Ratio Calculation in Optical Microscopy: Exploring Staining Protocol Variations
 
 ## **Overview**
 
-This GitHub repository contains the code and data used for our research paper entitled _Automated g-ratio calculation of sciatic nerve bundles in mice – a new approach for optical microscopy_. The contents of this repository will be made publicly available after acceptance of the submitted paper.
+This GitHub repository contains the code and data used for our research paper entitled _Automated Pipeline for Nerve Fiber Selection and G-Ratio Calculation in Optical Microscopy: Exploring Staining Protocol Variations_. The contents of this repository will be made publicly available after acceptance of the submitted paper.
 
 ## **Content**
 
