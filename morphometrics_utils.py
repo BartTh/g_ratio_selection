@@ -11,34 +11,60 @@ from monai.transforms import MapTransform
 
 class ConvertToMultiChanneld(MapTransform):
     """
-    Convert labels to multi channels based on brats classes:
-    label 0 is the background
-    label 1 is the axon
-    label 2 is the myelin
+    This transformation class is designed to take a single-channel label map and
+    convert it into a multi-channel format where each channel corresponds to one
+    class.
+
+    The conversion is based on the predefined classes for brain tumor segmentation:
+        - Channel 0: Background
+        - Channel 1: Axon
+        - Channel 2: Myelin
+
     """
 
     def __call__(self, data):
-        d = dict(data)
+
+        converted_data = dict(data)
         for key in self.keys:
-            result = []
-            result.append(d[key] == 0)
-            result.append(d[key] == 1)
-            result.append(d[key] == 2)
-            d[key] = np.stack(result, axis=0).astype(np.float32)
-        return d
+            # For each class label (0, 1, 2), create a binary mask and add to the result channels
+            result = [converted_data[key] == 0, converted_data[key] == 1, converted_data[key] == 2]
+
+            # For each class label (0, 1, 2), create a binary mask and add to the result channels
+            converted_data[key] = np.stack(result, axis=0).astype(np.float32)
+
+        return converted_data
 
 
 def expand_myelin(seg_im, axon_myelin_pixel_values):
     """
-    Expand myelin regions in the segmented image
+    This function expands the myelin regions in a segmented image. The myelin is assumed to be
+    represented by a specific pixel value provided in 'axon_myelin_pixel_values'.
+
+    Parameters:
+        seg_im (numpy.ndarray): The segmented image where axons and myelin have specific pixel values.
+        axon_myelin_pixel_values (list/tuple): A list or tuple containing the pixel values for axons
+                                               and myelin, respectively.
+
+    Returns:
+        numpy.ndarray: An image with the myelin regions expanded.
     """
 
+    # Create a copy of the segmented image to identify the myelin regions
     myel_im = copy.deepcopy(seg_im)
+
+    # Set the axon pixel values to zero in the segmented image
     seg_im[seg_im == axon_myelin_pixel_values[1]] = 0
+
+    # Isolate the myelin regions in the copied image
     myel_im[myel_im != axon_myelin_pixel_values[1]] = 0
 
+    # Define a disk-shaped structuring element with radius 2 for the dilation
     kernel = disk(2)
+
+    # Dilate the myelin regions using the defined kernel
     myel_im = cv2.dilate(myel_im, kernel)
+
+    # Replace the expanded myelin areas back into the original segmented image
     seg_im[myel_im != 0] = axon_myelin_pixel_values[1]
 
     return seg_im
@@ -65,18 +91,30 @@ def is_outlier(points, thresh=3.5):
         shortening estimates, and the magnitude of out-of-sequence thrusting in
         the Nankai Trough accretionary prism, Japan." AGU Fall Meeting Abstracts. Vol. 2011. 2011.
     """
+    # Ensure the points are in an array format
     points = np.array(points, dtype=int)
+
+    # Define the number of actual points for later indexing
     actual_points = len(points) // 2
 
+    # If points is 1D, convert it to 2D for consistent processing
     if len(points.shape) == 1:
         points = points[:, None]
+
+    # Calculate the absolute deviations from the median
     median = np.median(points, axis=0)
     diff = np.sum((points - median)**2, axis=-1)
     diff = np.sqrt(diff)
     med_abs_deviation = np.median(diff)
 
+    # Compute the modified Z-score for each observation
+    # Constant 0.6745 makes this estimate unbiased estimation of standard deviation if the data is Gaussian
     modified_z_score = 0.6745 * diff / med_abs_deviation
+
+    # Determine which points have a modified Z-score greater than the threshold
     isoutlier = modified_z_score > thresh
+
+    # Collect the indices of these outliers. Separate indices for vertical and horizontal points
     outlier_idx_vert = [i for i, x in enumerate(isoutlier) if x and i < actual_points]
     outlier_idx_horz = [i - actual_points for i, x in enumerate(isoutlier) if x and i > actual_points]
 
@@ -124,6 +162,7 @@ class NerveMorphometrics:
 
             self.props_df[label_id] = pd.DataFrame(props)
 
+        # Filter axon properties based on criteria presented in the paper to exlude unrelevant nerve bundles
         self.filtered_props_df = {'Axon_filt': self.props_df['Axon_seg'][
             (self.props_df['Axon_seg']['eccentricity'] < 0.95) &
             (self.props_df['Axon_seg']['solidity'] > 0.9) &
@@ -157,6 +196,7 @@ class NerveMorphometrics:
                     self.filtered_props_df['Myelin_seg'].append(mye_row)
                     self.filtered_props_df['Axon_seg'].append(axon_row)
 
+        # Create DataFrames from the filtered lists and reset indices
         self.filtered_props_df['Myelin_seg'] = pd.DataFrame(self.filtered_props_df['Myelin_seg']).reset_index(drop=True)  # .drop_duplicates()
         self.filtered_props_df['Axon_seg'] = pd.DataFrame(self.filtered_props_df['Axon_seg']).reset_index(drop=True)  # .drop_duplicates()
 
@@ -249,6 +289,26 @@ class NerveMorphometrics:
         return self.final_df, self.seg_im_selected
 
     def calculate_gratio(self):
+        """
+        Calculate the g-ratio.
+
+        This method computes the g-ratio based on the filled area of axon and myelin
+        segments previously calculated and stored in the final_df attribute of the class.
+        The g-ratio is a measure of the myelination of axons and is calculated using the
+        formula: g-ratio = sqrt(axon area / (axon area + myelin area)).
+
+        The method updates the final_df DataFrame with three new columns:
+        - 'AVF' (Axon Volume Fraction): The fraction of the total nerve area occupied by axons.
+        - 'MVF' (Myelin Volume Fraction): The fraction of the total nerve area occupied by myelin.
+        - 'G-ratio': The calculated g-ratio, rounded to three decimal places.
+
+        If the areas for axon or myelin segments are not found, it catches a KeyError and returns None.
+
+        Returns:
+            DataFrame: The class's final_df attribute updated with the AVF, MVF, and G-ratio.
+            None: If there's a KeyError during the calculation, indicating missing data.
+        """
+
         try:
             self.final_df[f'Axon_seg']['AVF'] = self.final_df[f'Axon_seg']['area_filled'] / \
                                                 (self.final_df[f'Axon_seg']['area_filled'] +
@@ -266,6 +326,25 @@ class NerveMorphometrics:
         return self.final_df
 
     def is_struct_open(self, binary_image_in):
+        """
+        Determine if the binary structure is "open".
+
+        An "open" structure is characterized by loose ends within the image, which
+        can indicate the presence of breaks or discontinuities in the nerve fibers.
+
+        Parameters:
+            binary_image_in (ndarray): A binary image where structures are represented by 1s
+                                       and the background is 0s.
+
+        The method first pads the image, then skeletonizes it. It proceeds by defining a
+        convolution kernel that helps in identifying end-points in the skeletonized image.
+        If more than one end-point is detected, the structure is considered open.
+
+        Returns:
+            bool: True if the structure is open (i.e., has more than one end-point),
+                  False otherwise.
+        """
+
         binary_image = np.pad(binary_image_in * 255, 2)
         skeleton = cv2.ximgproc.thinning(binary_image.astype('uint8'), None, 1)
         # Threshold the image so that white pixels get a value of 0 and
@@ -280,12 +359,8 @@ class NerveMorphometrics:
         # Convolve the image with the kernel:
         img_filtered = cv2.filter2D(binary_image, -1, h)
 
-        # Extract only the end-points pixels, those with
-        # an intensity value of 110:
+        # Extract only the end-points pixels, those with an intensity value of 110:
         end_points_mask = np.where(img_filtered == 110, 255, 0)
-
-        # The above operation converted the image to 32-bit float,
-        # convert back to 8-bit uint
         end_points_mask = end_points_mask.astype(np.uint8)
 
         return np.sum(end_points_mask) > 1
