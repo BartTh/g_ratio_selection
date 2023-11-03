@@ -8,7 +8,6 @@ import torch
 from PIL import Image
 from morphometrics_utils import ConvertToMultiChanneld
 
-from monai.config import print_config
 from monai.data import DataLoader, CacheDataset
 from monai.inferers import sliding_window_inference
 from monai.metrics import DiceMetric, compute_confusion_matrix_metric, get_confusion_matrix
@@ -27,15 +26,10 @@ from monai.transforms import (
 )
 
 
-print_config()
-
-predict_on_vanilla = True
-
-project_name = r'Gratio\vanilla'
 experiment_name = '221219_2144_bz10_patch512_lr1e-03_e1600_chan16-qp4096-1'
 
 root_dir = os.getcwd()
-data_dir = os.path.join(r'D:\Data\{}'.format(project_name))
+data_dir = r'.\Data'
 proj_dir = os.path.join(root_dir, 'experiments', experiment_name)
 
 shutil.copy('eval.py', proj_dir)
@@ -46,31 +40,19 @@ params = json.load(open(params_file))
 files = {'test': {}}
 set_files = {}
 
-if predict_on_vanilla:
-    files['test']['image'] = sorted(glob.glob(os.path.join(data_dir, "images", "*.nii.gz")))[20:30]
-    files['test']['label'] = sorted(glob.glob(os.path.join(data_dir, "images", "*.nii.gz")))[20:30]
-    test_transformations = [
-        LoadImaged(keys=["image"]),
-        AsChannelFirstd(keys=['image'], channel_dim=-1),
-        Spacingd(keys=["image"], pixdim=(1, 1), mode='bilinear'),
-        Orientationd(keys=["image"], axcodes="RAS"),
-        ScaleIntensityRanged(keys=["image"], a_min=params['intensity_min'], a_max=params['intensity_max'], b_min=0.0,
-                             b_max=1.0, clip=True),
-        ToTensord(keys=["image"]),
-    ]
-else:
-    files['test']['image'] = sorted(glob.glob(os.path.join(data_dir, 'test', "images", "*.nii.gz")))[:]
-    files['test']['label'] = sorted(glob.glob(os.path.join(data_dir, 'test', "labels", "*label.nii.gz")))[:]
-    test_transformations = [
-        LoadImaged(keys=["image", "label"]),
-        AsChannelFirstd(keys=['image'], channel_dim=-1),
-        ConvertToMultiChanneld(keys="label"),
-        Spacingd(keys=["image", "label"], pixdim=(1, 1), mode=('bilinear', 'nearest')),
-        Orientationd(keys=["image", "label"], axcodes="RAS"),
-        ScaleIntensityRanged(keys=["image"], a_min=params['intensity_min'], a_max=params['intensity_max'], b_min=0.0,
-                             b_max=1.0, clip=True),
-        ToTensord(keys=["image", "label"]),
-    ]
+
+files['test']['image'] = sorted(glob.glob(os.path.join(data_dir, 'test', "images", "*.nii.gz")))[:]
+files['test']['label'] = sorted(glob.glob(os.path.join(data_dir, 'test', "labels", "*label.nii.gz")))[:]
+test_transformations = [
+    LoadImaged(keys=["image", "label"]),
+    AsChannelFirstd(keys=['image'], channel_dim=-1),
+    ConvertToMultiChanneld(keys="label"),
+    Spacingd(keys=["image", "label"], pixdim=(1, 1), mode=('bilinear', 'nearest')),
+    Orientationd(keys=["image", "label"], axcodes="RAS"),
+    ScaleIntensityRanged(keys=["image"], a_min=params['intensity_min'], a_max=params['intensity_max'], b_min=0.0,
+                         b_max=1.0, clip=True),
+    ToTensord(keys=["image", "label"]),
+]
 
 set_files['test'] = [{"image": image_name, "label": label_name} for image_name, label_name in
                      zip(files['test']['image'], files['test']['label'])]
@@ -110,14 +92,9 @@ show_slice = 40
 performance_store = {'Experiment': params['experiment_name'], 'Patient ID': [], 'Dice': [], 'Accuracy': [],
                      'gt_vol': [], 'seg_vol': []}
 
-if predict_on_vanilla:
-    save_dir = os.path.join(root_dir, 'all_new_predict', 'predictions')
-    saver = SaveImage(output_dir=save_dir,
-                      output_ext=".png")
-else:
-    save_dir = os.path.join(root_dir, 'experiments', '{}'.format(params['experiment_name']), 'predictions')
-    saver = SaveImage(output_dir=save_dir,
-                      output_ext=".png")
+save_dir = os.path.join(root_dir, 'experiments', '{}'.format(params['experiment_name']), 'predictions')
+saver = SaveImage(output_dir=save_dir,
+                  output_ext=".png")
 
 with torch.no_grad():
     for i, test_data in enumerate(test_loader):
@@ -144,25 +121,23 @@ with torch.no_grad():
             save_im = Image.fromarray((im * 255).astype("uint8")).convert('L')
             save_im.save(os.path.join(save_dir, f"{f_name}.png"))
 
-        if not predict_on_vanilla:
-            test_labels = test_data["label"].to(device)
+        test_labels = test_data["label"].to(device)
 
-            # compute metric for current iteration
-            dice_metric(y_pred=test_outputs, y=test_labels)
-            conf_matrix = get_confusion_matrix(y_pred=test_outputs, y=test_labels)
+        # compute metric for current iteration
+        dice_metric(y_pred=test_outputs, y=test_labels)
+        conf_matrix = get_confusion_matrix(y_pred=test_outputs, y=test_labels)
 
-            dice_value = np.round(dice_metric(y_pred=test_outputs, y=test_labels)[0].to('cpu'), 4)
+        dice_value = np.round(dice_metric(y_pred=test_outputs, y=test_labels)[0].to('cpu'), 4)
 
-            print("Dice in test set no {}: {}".format(
-                os.path.split(test_data['label_meta_dict']['filename_or_obj'][0])[1], dice_value))
+        print("Dice in test set no {}: {}".format(
+            os.path.split(test_data['label_meta_dict']['filename_or_obj'][0])[1], dice_value))
 
-            performance_store['Dice'].append(dice_value)
-            performance_store['Accuracy'].append(compute_confusion_matrix_metric('accuracy', conf_matrix).to('cpu'))
-            performance_store['Patient ID'].append(pat_id)
+        performance_store['Dice'].append(dice_value)
+        performance_store['Accuracy'].append(compute_confusion_matrix_metric('accuracy', conf_matrix).to('cpu'))
+        performance_store['Patient ID'].append(pat_id)
 
-if not predict_on_vanilla:
-    mean_dices = str(np.mean([x.__array__() for x in performance_store['Dice']], axis=0))
-    mean_acc = str(np.mean([x.__array__() for x in performance_store['Accuracy']], axis=0))
+mean_dices = str(np.mean([x.__array__() for x in performance_store['Dice']], axis=0))
+mean_acc = str(np.mean([x.__array__() for x in performance_store['Accuracy']], axis=0))
 
-    with open(fr'{os.path.split(save_dir)[0]}\{mean_dices}.txt', 'w') as f:
-        f.write(f'{mean_dices}')
+with open(fr'{os.path.split(save_dir)[0]}\{mean_dices}.txt', 'w') as f:
+    f.write(f'{mean_dices}')

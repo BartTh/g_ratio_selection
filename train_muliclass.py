@@ -75,7 +75,7 @@ params['experiment_name'] = "{}_bz{}_patch{}_lr{:.0e}_e{}_chan{}-qp{}".format(
 
 set_determinism(seed=params['seed'])
 root_dir = os.getcwd()
-data_dir = os.path.join(r'.\Data')
+data_dir = r'.\Data'
 
 files = {}
 image_sets = ['train', 'validation', 'test']
