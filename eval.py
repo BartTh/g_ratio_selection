@@ -72,7 +72,7 @@ test_transformations = [
     ToTensord(keys=["image", "label"]),
 ]
 
-# Compose transformations
+# Compose the lists of transformations into a single transform
 test_transforms = Compose(test_transformations)
 
 # Metrics and post-transforms setup
