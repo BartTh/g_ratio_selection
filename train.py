@@ -38,46 +38,6 @@ from monai.transforms import (
 from monai.utils import set_determinism
 from monai.visualize import plot_2d_or_3d_image
 
-import glob
-import os
-import shutil
-import re
-import datetime
-import json
-import itertools
-import matplotlib.pyplot as plt
-
-import numpy as np
-import torch
-from torch.utils.tensorboard import SummaryWriter
-from morphometrics_utils import ConvertToMultiChanneld
-
-from monai.data import DataLoader, CacheDataset
-from monai.inferers import sliding_window_inference
-from monai.losses import DiceLoss
-from monai.metrics import DiceMetric
-from monai.networks.layers import Norm
-from monai.networks.nets import UNet
-from monai.transforms import (
-    LoadImaged,
-    Orientationd,
-    ScaleIntensityRanged,
-    ToTensord,
-    RandCropByLabelClassesd,
-    RandScaleIntensityd,
-    RandGaussianSmoothd,
-    RandGaussianNoised,
-    RandZoomd,
-    RandFlipd,
-    Spacingd,
-    Activations,
-    AsChannelFirstd,
-    Compose,
-    AsDiscrete,
-)
-from monai.utils import set_determinism
-from monai.visualize import plot_2d_or_3d_image
-
 # Define parameters for the experiment
 params = {
     'experiment_name': {},
