@@ -130,3 +130,6 @@ dmypy.json
 
 # data folders (download from zenodo)
 data/
+
+#project folders
+experiments/
