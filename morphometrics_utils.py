@@ -122,7 +122,7 @@ def is_outlier(points, thresh=3.5):
 
 
 class NerveMorphometrics:
-    def __init__(self, seg_im, axon_myelin_pixel_values, pixel_size):
+    def __init__(self, seg_im, axon_myelin_pixel_values, pixel_size=0.05):
         """
         Initialize NerveMorphometrics class
 
