@@ -27,7 +27,7 @@ for file in glob.glob(fr'{raw_data_dir}\*.jpg'):
 
         nib_lab = nib.Nifti1Image(img * 0, affine=affine)
         nib.save(nib_lab, os.path.join(Path(raw_data_dir).parent.joinpath('labels'),
-                                       f'{Path(file).name[:-4]}.nii.gz'))
+                                       f'{Path(file).name[:-4]}-label.nii.gz'))
 
         # If single file iteration flag is set, break the loop after first iteration
         if single_file_iteration:

@@ -41,7 +41,7 @@ from monai.visualize import plot_2d_or_3d_image
 # Define parameters for the experiment
 params = {
     'experiment_name': {},
-    'qupath_export_and_scaling': "4096_0_05",
+    'qupath_export_and_scaling': "4096_9000_0_05",
     'patch_size': (512, 512),
     'bz_size': 10,
     'n_classes': 3,
