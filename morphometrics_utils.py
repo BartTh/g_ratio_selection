@@ -9,30 +9,50 @@ from skimage.measure import label, regionprops_table
 from monai.transforms import MapTransform
 
 
+# class ConvertToMultiChanneld(MapTransform):
+#     """
+#     This transformation class is designed to take a single-channel label map and
+#     convert it into a multi-channel format where each channel corresponds to one
+#     class.
+#
+#     The conversion is based on the predefined classes for brain tumor segmentation:
+#         - Channel 0: Background
+#         - Channel 1: Axon
+#         - Channel 2: Myelin
+#
+#     """
+#
+#     def __call__(self, data):
+#
+#         converted_data = dict(data)
+#         for key in self.keys:
+#             # For each class label (0, 1, 2), create a binary mask and add to the result channels
+#             result = [converted_data[key] == 0, converted_data[key] == 1, converted_data[key] == 2]
+#
+#             # For each class label (0, 1, 2), create a binary mask and add to the result channels
+#             converted_data[key] = np.stack(result, axis=0).astype(np.float32)
+#
+#         return converted_data
+#
+#
 class ConvertToMultiChanneld(MapTransform):
     """
-    This transformation class is designed to take a single-channel label map and
-    convert it into a multi-channel format where each channel corresponds to one
-    class.
-
-    The conversion is based on the predefined classes for brain tumor segmentation:
-        - Channel 0: Background
-        - Channel 1: Axon
-        - Channel 2: Myelin
+    Convert labels to multi channels:
+    label 1 are healthy cocoons
+    label 2 are parasites
+    label 3 are larvae
 
     """
 
     def __call__(self, data):
-
-        converted_data = dict(data)
+        d = dict(data)
         for key in self.keys:
-            # For each class label (0, 1, 2), create a binary mask and add to the result channels
-            result = [converted_data[key] == 0, converted_data[key] == 1, converted_data[key] == 2]
-
-            # For each class label (0, 1, 2), create a binary mask and add to the result channels
-            converted_data[key] = np.stack(result, axis=0).astype(np.float32)
-
-        return converted_data
+            result = []
+            result.append(d[key] == 0)
+            result.append(d[key] == 1)
+            result.append(d[key] == 2)
+            d[key] = np.stack(result, axis=0).astype(np.float32)
+        return d
 
 
 def expand_myelin(seg_im, axon_myelin_pixel_values):
@@ -280,13 +300,18 @@ class NerveMorphometrics:
         self.final_df['Axon_seg'] = self.final_df['Axon_seg'].reset_index(drop=True)
         self.final_df['Myelin_seg'] = self.final_df['Myelin_seg'].reset_index(drop=True)
 
-        self.final_df['Axon_seg']['Myelin_Thickness'] = abs(self.final_df['Myelin_seg']['equivalent_diameter_area'] -
-                                                            self.final_df['Axon_seg']['equivalent_diameter_area']) / 2 *\
+        # MYELIN AREA IS THE WHOLE NERVE!!
+        self.final_df['Axon_seg']['Myelin_Thickness'] = (self.calculate_equivalent_diameter_area(
+                                                         self.final_df['Myelin_seg']['area_filled']) -
+                                                         self.final_df['Axon_seg']['equivalent_diameter_area']) / 2 *\
                                                         self.pixel_size
         self.final_df['Axon_seg']['Axon_Diameter'] = self.final_df['Axon_seg']['equivalent_diameter_area'] / 2 *\
-                                                        self.pixel_size
+                                                     self.pixel_size
 
         return self.final_df, self.seg_im_selected
+
+    def calculate_equivalent_diameter_area(self, area_filled):
+        return 2 * np.sqrt(area_filled / np.pi)
 
     def calculate_gratio(self):
         """
@@ -310,12 +335,12 @@ class NerveMorphometrics:
         """
 
         try:
+            # MYELIN AREA IS THE WHOLE NERVE!!
             self.final_df[f'Axon_seg']['AVF'] = self.final_df[f'Axon_seg']['area_filled'] / \
-                                                (self.final_df[f'Axon_seg']['area_filled'] +
-                                                 self.final_df[f'Myelin_seg']['area_filled'])
-            self.final_df[f'Myelin_seg']['MVF'] = self.final_df[f'Myelin_seg']['area_filled'] / \
-                                                  (self.final_df[f'Axon_seg']['area_filled'] +
-                                                   self.final_df[f'Myelin_seg']['area_filled'])
+                                                (self.final_df[f'Myelin_seg']['area_filled'])
+            self.final_df[f'Myelin_seg']['MVF'] = (self.final_df[f'Myelin_seg']['area_filled'] -
+                                                   self.final_df[f'Axon_seg']['area_filled']) / \
+                                                  (self.final_df[f'Myelin_seg']['area_filled'])
             self.final_df[f'Axon_seg']['G-ratio'] = np.round(
                 np.sqrt(1 / (1 + self.final_df[f'Myelin_seg']['MVF'] /
                              self.final_df[f'Axon_seg']['AVF'])), 3)

@@ -12,6 +12,7 @@ from PIL import Image
 from pathlib import Path
 from datetime import datetime
 from morphometrics_utils import NerveMorphometrics, expand_myelin
+from natsort import natsorted
 
 from monai.data import DataLoader, CacheDataset
 from monai.inferers import sliding_window_inference
@@ -34,7 +35,7 @@ from monai.transforms import (
 single_file_iteration = False
 
 # Dataset identifier
-dataset = '20231213'
+dataset = '20231213_tb'
 
 # Directory paths for raw data and other data related to the project
 root_dir = os.getcwd()  # Current working directory
@@ -48,7 +49,7 @@ root_dir = os.getcwd()
 proj_dir = os.path.join(root_dir, 'experiments', '221219_2144_bz10_patch512_lr1e-03_e1600_chan16-qp4096-1')
 
 # new_model
-# proj_dir = os.path.join(root_dir, 'experiments', '221219_2144_bz10_patch512_lr1e-03_e1600_chan16-qp4096-1')
+# proj_dir = os.path.join(root_dir, 'experiments', '231219_1346_bz10_patch512_lr1e-03_e1600_chan16-qp4096_0_05-1')
 
 # Creating directories if they do not exist
 Path.mkdir(inference_dir, exist_ok=True, parents=True)
@@ -58,28 +59,47 @@ Path.mkdir(Path(data_dir, 'images'), parents=True, exist_ok=True)
 affine = np.eye(4)
 
 # Iterate over all jpg images in the raw data directory
-for file in glob.glob(fr'{raw_data_dir}\*\*.jpg'):
+for file in natsorted(glob.glob(fr'{raw_data_dir}\*\*.jpg')):
     # Check if the file pertains to a mouse and the corresponding .nii.gz file does not exist
     if not Path.exists(Path(data_dir).joinpath('images', f'{Path(file).name[:-4]}.nii.gz')):
         # Load the image file
         img = np.array(Image.open(file))
+        # CHECK how to exclude the false segmentations
+        # file_dir = r'D:\Projects\published\g_ratio_selection\data\output\20231213\images'
+        # file1 = r'\AA1M3 P-3 Wdh [d=0.21717,x=34931,y=58219,w=1955,h=1954].jpg'
+        # file2 = r'\AA1M3 P-3 Wdh [d=0.21717,x=36872,y=54338,w=1955,h=1954].jpg'
+        # im1 = np.array(Image.open(file_dir + file1))
+        # im2 = np.array(Image.open(file_dir + file2))
+        # for i in range(0, 3):
+        #     print(i)
+        #     print(np.quantile(im1[:, :, i], 0.01))
+        #     print(np.quantile(im2[:, :, i], 0.01))
+        # print(np.quantile(im1[:, :], 0.01))
+        # print(np.quantile(im2[:, :], 0.01))
 
         # Check if the image is not mostly 'empty'
         # by a rudimentary check on mean intensity (increase for more inclusion)
-        if np.mean(img) < 200:
-            print(f'working on file {file}')
-            # Convert the image to Nifti format
-            nib_img = nib.Nifti1Image(img, affine=affine)
-            # Save the Nifti image
-            nib.save(nib_img, os.path.join(data_dir, 'images', f'{Path(file).name[:-4]}.nii.gz'))
-            # Copy the original image to the new location
-            shutil.copy2(file, os.path.join(data_dir, 'images'))
+        print(np.mean(img))
+        if np.mean(img) < 250:
+            print(np.quantile(img, 0.01))
+            if np.quantile(img, 0.01) < 90:
+                print(f'working on file {file}')
+                # Convert the image to Nifti format
+                nib_img = nib.Nifti1Image(img, affine=affine)
+                # Save the Nifti image
+                nib.save(nib_img, os.path.join(data_dir, 'images', f'{Path(file).name[:-4]}.nii.gz'))
+                # Copy the original image to the new location
+                shutil.copy2(file, os.path.join(data_dir, 'images'))
+                # If single file iteration flag is set, break the loop after first iteration
+                if single_file_iteration:
+                    break
+            else:
+                print(f'filled with noise.... {file}')
         else:
             print(f'probably empty .. {file}')
+        # if single_file_iteration:
+        #     break
 
-        # If single file iteration flag is set, break the loop after first iteration
-        if single_file_iteration:
-            break
     else:
         print(f'already prepared .. {file}')
 
@@ -213,6 +233,7 @@ for image_name in range(0, len(files)):
     # Check if the segmented and selected image already exists to skip processing.
     if not data_dir.joinpath(
             f'exported_images/{files[image_name][:-4]}/{files[image_name][:-4]}_seg_selected.jpg').exists():
+    # if not data_dir.joinpath('g_ratio_datafiles', f'Axon_seg-{files[image_name][:-4]}.csv').exists():
         print(f'Working on image {files[image_name][:-4]}')
 
         # Read the image file and convert it from BGR to RGB color space for processing
@@ -259,6 +280,8 @@ for image_name in range(0, len(files)):
 
         # Calculate the g-ratio, which is an important metric for nerve fibers
         final_df = nerve_morphs.calculate_gratio()
+        final_df['Myelin_seg'] = final_df['Myelin_seg'][final_df['Axon_seg'].Myelin_Thickness > 0]
+        final_df['Axon_seg'] = final_df['Axon_seg'][final_df['Axon_seg'].Myelin_Thickness > 0]
 
         # Export the g-ratio data to CSV files
         for key in final_df:
@@ -288,9 +311,8 @@ for image_name in range(0, len(files)):
         # If the script is set to only iterate over a single file, break the loop after processing
         if single_file_iteration:
             break
-else:
-    # If the processed image already exists, print a message indicating so
-    print(
-        f"{data_dir.joinpath(f'exported_images/{files[image_name][:-4]}/{files[image_name][:-4]}_seg_selected.jpg')} "
-        f"has been processed..")
-
+    else:
+        # If the processed image already exists, print a message indicating so
+        print(
+            f"{data_dir.joinpath(f'exported_images/{files[image_name][:-4]}/{files[image_name][:-4]}_seg_selected.jpg')} "
+            f"has been processed..")
