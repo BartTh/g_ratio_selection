@@ -254,22 +254,43 @@ class NerveMorphometrics:
             closest_myelin = cdist([axon_cent], centroid_arrays['Myelin_seg'], 'euclidean').argmin()
             distance = cdist([axon_cent], centroid_arrays['Myelin_seg'], 'euclidean').min()
             if distance < max_com_distance:
-                self.final_df['Axon_seg'] = self.final_df['Axon_seg'].append(
-                    self.filtered_props_df['Axon_seg'].iloc[axon_idx])
-                self.final_df['Myelin_seg'] = self.final_df['Myelin_seg'].append(
-                    self.filtered_props_df['Myelin_seg'].iloc[closest_myelin])
+
+                # self.final_df['Axon_seg'] = self.final_df['Axon_seg'].append(
+                #     self.filtered_props_df['Axon_seg'].iloc[axon_idx])
+
+                self.final_df['Axon_seg'] = pd.concat([self.final_df['Axon_seg'],
+                                                       pd.DataFrame([self.filtered_props_df['Axon_seg'].iloc[axon_idx]],
+                                                                    columns=self.filtered_props_df['Axon_seg'].columns)],
+                                                      ignore_index=True)
+
+                # self.final_df['Myelin_seg'] = self.final_df['Myelin_seg'].append(
+                #     self.filtered_props_df['Myelin_seg'].iloc[closest_myelin])
+
+                self.final_df['Myelin_seg'] = pd.concat([self.final_df['Myelin_seg'],
+                                                         pd.DataFrame([self.filtered_props_df['Myelin_seg'].iloc[closest_myelin]],
+                                                                      columns=self.filtered_props_df['Myelin_seg'].columns)],
+                                                        ignore_index=True)
+
                 # Store length / width ratio for additional selection criteria
                 myel_row = self.final_df['Myelin_seg'].iloc[-1]
                 axon_row = self.final_df['Axon_seg'].iloc[-1]
+
                 a_vert = (axon_row['bbox-2'] - axon_row['bbox-0'])
                 a_horz = (axon_row['bbox-3'] - axon_row['bbox-1'])
                 m_vert = (myel_row['bbox-2'] - myel_row['bbox-0'])
                 m_horz = (myel_row['bbox-3'] - myel_row['bbox-1'])
-                self.final_df['Axon_seg']['Vert_diff'].iloc[-1] = int(a_vert / m_vert * 100)
-                self.final_df['Axon_seg']['Horz_diff'].iloc[-1] = int(a_horz / m_horz * 100)
+                # self.final_df['Axon_seg']['Vert_diff'].iloc[-1] = int(a_vert / m_vert * 100)
+                # self.final_df['Axon_seg']['Horz_diff'].iloc[-1] = int(a_horz / m_horz * 100)
+                self.final_df['Axon_seg'].loc[self.final_df['Axon_seg'].index[-1],  'Vert_diff'] = (
+                    int(a_vert / m_vert * 100))
+                self.final_df['Axon_seg'].loc[self.final_df['Axon_seg'].index[-1], 'Horz_diff'] = (
+                    int(a_horz / m_horz * 100))
 
-        myelin_based_outliers = is_outlier(self.final_df['Axon_seg']['Vert_diff'].append(
-            self.final_df['Axon_seg']['Horz_diff']))
+        # myelin_based_outliers = is_outlier(self.final_df['Axon_seg']['Vert_diff'].append(
+        #     self.final_df['Axon_seg']['Horz_diff']))
+
+        myelin_based_outliers = is_outlier(pd.concat([self.final_df['Axon_seg']['Vert_diff'],
+                                                      self.final_df['Axon_seg']['Horz_diff']], axis=0))
 
         # Fill out seg_im_selected
         for idx, label_id in enumerate(['Axon_seg', 'Myelin_seg']):

@@ -33,7 +33,7 @@ from monai.transforms import (
 Image.MAX_IMAGE_PIXELS = None
 
 # Flag to control whether the script should stop after processing a single file
-single_file_iteration = False
+single_file_iteration = True
 
 # Dataset identifier
 dataset = '20231213_tb'
