@@ -128,9 +128,9 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# data folders (download from zenodo)
+# data folders
 data/
 
-#project folders
-experiments/
+# project folders
+experiments1/
 g_ratio_venv/
