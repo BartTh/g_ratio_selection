@@ -132,5 +132,7 @@ dmypy.json
 data/
 
 # project folders
-experiments1/
 g_ratio_venv/
+
+# old exp folder
+experiments_old/
