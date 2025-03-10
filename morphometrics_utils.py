@@ -184,7 +184,7 @@ class NerveMorphometrics:
 
         # Filter axon properties based on criteria presented in the paper to exlude unrelevant nerve bundles
         self.filtered_props_df = {'Axon_filt': self.props_df['Axon_seg'][
-            (self.props_df['Axon_seg']['eccentricity'] < 0.95) &
+            (self.props_df['Axon_seg']['eccentricity'] < 0.99) &
             (self.props_df['Axon_seg']['solidity'] > 0.9) &
             (self.props_df['Axon_seg']['area_filled'] > 50) &
             (self.props_df['Axon_seg']['bbox-0'] != 0) &

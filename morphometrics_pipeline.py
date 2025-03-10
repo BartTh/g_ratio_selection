@@ -36,7 +36,7 @@ Image.MAX_IMAGE_PIXELS = None
 single_file_iteration = False
 
 # Dataset identifier
-dataset = '20231213_tb'
+dataset = 'ppd_2000'
 
 # Directory paths for raw data and other data related to the project
 root_dir = os.getcwd()  # Current working directory

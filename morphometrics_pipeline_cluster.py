@@ -3,8 +3,11 @@ import glob
 import shutil
 import json
 import torch
-import cv2
+
 import os
+os.environ["OPENCV_IO_MAX_IMAGE_PIXELS"] = pow(2,40).__str__()
+
+import cv2
 import numpy as np
 import nibabel as nib
 
@@ -33,18 +36,19 @@ from monai.transforms import (
 Image.MAX_IMAGE_PIXELS = None
 
 # Flag to control whether the script should stop after processing a single file
-single_file_iteration = True
+single_file_iteration = False
 
 # Dataset identifier
-dataset = '20231213_tb'
+dataset = 'ppd_small'
 
 # Directory paths for raw data and other data related to the project
-root_dir = os.getcwd()  # Current working directory
-raw_data_dir = os.path.join(root_dir, 'data', 'input', f'{dataset}')  # Input data directory
-data_dir = Path(os.path.join(root_dir, 'data', 'output', f'{dataset}'))  # Output data directory
+root_dir = os.path.join(os.getcwd())  # Current working directory
+print('=================================')
+print(root_dir)
+raw_data_dir = os.path.join(root_dir, 'input', f'{dataset}')  # Input data directory
+data_dir = Path(os.path.join(root_dir, 'output', f'{dataset}'))  # Output data directory
 
 inference_dir = Path(data_dir).joinpath('predictions')
-root_dir = os.getcwd()
 
 #methods paper model:
 proj_dir = os.path.join(root_dir, 'experiments', '221219_2144_bz10_patch512_lr1e-03_e1600_chan16-qp4096-1')
@@ -59,8 +63,10 @@ Path.mkdir(Path(data_dir, 'images'), parents=True, exist_ok=True)
 # Identity affine for Nifti image creation
 affine = np.eye(4)
 
+print(f"Looking for files in dir {os.path.join(raw_data_dir, '*', '*.jpg')}")
+
 # Iterate over all jpg images in the raw data directory
-for file in natsorted(glob.glob(fr'{raw_data_dir}\*\*.jpg')):
+for file in natsorted(glob.glob(os.path.join(raw_data_dir, '*', '*.jpg'))):
     # Check if the file pertains to a mouse and the corresponding .nii.gz file does not exist
     if not Path.exists(Path(data_dir).joinpath('images', f'{Path(file).name[:-4]}.nii.gz')):
         # Load the image file
@@ -93,6 +99,7 @@ for file in natsorted(glob.glob(fr'{raw_data_dir}\*\*.jpg')):
                 shutil.copy2(file, os.path.join(data_dir, 'images'))
                 # If single file iteration flag is set, break the loop after first iteration
                 if single_file_iteration:
+                    print('Breaking because of single_file_iteration..')
                     break
             else:
                 print(f'filled with noise.... {file}')
@@ -107,7 +114,7 @@ for file in natsorted(glob.glob(fr'{raw_data_dir}\*\*.jpg')):
 print('Finished preparing raw files..')
 
 # Load the parameters for model configuration from JSON file
-params_file = proj_dir + r'\parameters.json'
+params_file = os.path.join(proj_dir, 'parameters.json')
 params = json.load(open(params_file))
 
 # Test transformations setup
@@ -159,8 +166,10 @@ files = sorted(glob.glob(os.path.join(data_dir, "images", "*.nii.gz")))
 # Iterate through the list of files which contain the images for inference.
 for image_name in files:
     # Extract the file name without the path and extension.
-    f_name = image_name.split('\\')[-1][:-7]
+    f_name = image_name.split('/')[-1][:-7]
+    print(f'first f_name = {f_name}')
 
+    print(f'Inference_dir == {inference_dir}..')
     # Skip processing if the transformed image already exists.
     if not Path(inference_dir.joinpath(f_name, f_name + '_trans.png')).exists():
         # Prepare the image data for the test dataset.
@@ -200,8 +209,16 @@ for image_name in files:
                 for count, test_output in enumerate(test_outputs):
                     name_dict = {'filename_or_obj': test_data["image_meta_dict"]['filename_or_obj'][count]}
                     saver(test_output, name_dict)
-                    f_name = name_dict['filename_or_obj'].split('\\')[-1][:-7]
-                    file = os.path.join(inference_dir, f_name, f_name + '_trans.png')
+
+                    # CHECK FOR OS !!!!!
+                    f_name = name_dict['filename_or_obj'].split('/')[-1][:-7]
+                    file = str(inference_dir.joinpath(f_name, f_name + '_trans.png'))
+                    print('==========================================================================================')
+                    print(f'Inference_dir == {inference_dir}..')
+                    print(f'f_name = {f_name}')
+                    print(f'FILE == {file}..')
+                    print(f'name dict == {name_dict}..')
+                    print('==========================================================================================')
 
                     # Modify and save the image in the correct orientation and format.
                     im = np.swapaxes(np.array(Image.open(file)), 0, 1)
@@ -233,8 +250,10 @@ for image_name in range(0, len(files)):
 
     # Check if the segmented and selected image already exists to skip processing.
     if not data_dir.joinpath(
-            f'exported_images/{files[image_name][:-4]}/{files[image_name][:-4]}_seg_selected.jpg').exists():
-    # if not data_dir.joinpath('g_ratio_datafiles', f'Axon_seg-{files[image_name][:-4]}.csv').exists():
+            'exported_images',
+            f'{files[image_name][:-4]}',
+            f'{files[image_name][:-4]}_seg_selected.jpg').exists():
+        # if not data_dir.joinpath('g_ratio_datafiles', f'Axon_seg-{files[image_name][:-4]}.csv').exists():
         print(f'Working on image {files[image_name][:-4]}')
 
         # Read the image file and convert it from BGR to RGB color space for processing
@@ -294,20 +313,26 @@ for image_name in range(0, len(files)):
             continue
 
         # Create a directory for exporting images if it does not already exist
-        data_dir.joinpath(f'exported_images/{files[image_name][:-4]}').mkdir(exist_ok=True, parents=True)
+        data_dir.joinpath('exported_images', f'{files[image_name][:-4]}').mkdir(exist_ok=True, parents=True)
 
         # Convert the OpenCV image to a PIL Image and save it
         im = Image.fromarray(im)
-        im.save(data_dir.joinpath(f'exported_images/{files[image_name][:-4]}/{files[image_name][:-4]}_im.jpg'))
+        im.save(data_dir.joinpath('exported_images',
+                                  f'{files[image_name][:-4]}',
+                                  f'{files[image_name][:-4]}_im.jpg'))
 
         # Convert the segmentation image to a PIL Image and save it
         seg_im = Image.fromarray(seg_im)
-        seg_im.save(data_dir.joinpath(f'exported_images/{files[image_name][:-4]}/{files[image_name][:-4]}_seg.jpg'))
+        seg_im.save(data_dir.joinpath('exported_images',
+                                      f'{files[image_name][:-4]}',
+                                      f'{files[image_name][:-4]}_seg.jpg'))
 
         # Convert the selected segmentation image to a PIL Image and save it
         seg_im_selected = Image.fromarray(seg_im_selected)
         seg_im_selected.save(
-            data_dir.joinpath(f'exported_images/{files[image_name][:-4]}/{files[image_name][:-4]}_seg_selected.jpg'))
+            data_dir.joinpath('exported_images',
+                              f'{files[image_name][:-4]}',
+                              f'{files[image_name][:-4]}_seg_selected.jpg'))
 
         # If the script is set to only iterate over a single file, break the loop after processing
         if single_file_iteration:
@@ -315,5 +340,5 @@ for image_name in range(0, len(files)):
     else:
         # If the processed image already exists, print a message indicating so
         print(
-            f"{data_dir.joinpath(f'exported_images/{files[image_name][:-4]}/{files[image_name][:-4]}_seg_selected.jpg')} "
+            f"{data_dir.joinpath('exported_images', f'{files[image_name][:-4]}', f'{files[image_name][:-4]}_seg_selected.jpg')} "
             f"has been processed..")
