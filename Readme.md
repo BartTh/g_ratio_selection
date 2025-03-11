@@ -22,12 +22,12 @@ The pipeline consists of several scripts designed for different stages of the an
 
 3. **Inference and Analysis**:
 
-   - Run `morphometrics_pipeline.py` to perform segmentation on new images and extract morphometric data.
+   - Run `morphometrics_pipeline.py` (`morphometrics_pipeline_cluster.py` with additional verbose feedback for cluster environment) to perform segmentation on new images and extract morphometric data.
 
 4. **Evaluation**:
 
    - Utilize `eval.py` to assess the performance of the segmentation model against ground truth data.
-   - 
+     
 5. **Utility Scripts**:
 
    - `count_nerves_in_gt.py`: Counts the number of nerve structures in ground truth images.
