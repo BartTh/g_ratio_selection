@@ -55,10 +55,10 @@ class ConvertToMultiChanneld(MapTransform):
         return d
 
 
-def expand_myelin(seg_im, axon_myelin_pixel_values):
+def expand_axon_and_myelin(seg_im, axon_myelin_pixel_values):
     """
-    This function expands the myelin regions in a segmented image. The myelin is assumed to be
-    represented by a specific pixel value provided in 'axon_myelin_pixel_values'.
+    This function expands both the axon and myelin regions in a segmented image.
+    It ensures that myelin regions are continuous and fills any holes within the axon regions.
 
     Parameters:
         seg_im (numpy.ndarray): The segmented image where axons and myelin have specific pixel values.
@@ -66,26 +66,33 @@ def expand_myelin(seg_im, axon_myelin_pixel_values):
                                                and myelin, respectively.
 
     Returns:
-        numpy.ndarray: An image with the myelin regions expanded.
+        numpy.ndarray: An image with the axon and myelin regions expanded and filled.
     """
-
-    # Create a copy of the segmented image to identify the myelin regions
+    # Create a copy of the segmented image to process myelin and axon separately
     myel_im = copy.deepcopy(seg_im)
+    axon_im = copy.deepcopy(seg_im)
 
-    # Set the axon pixel values to zero in the segmented image
+    # Set the axon pixel values to zero in the segmented image for myelin processing
     seg_im[seg_im == axon_myelin_pixel_values[1]] = 0
 
-    # Isolate the myelin regions in the copied image
+    # Isolate the myelin regions
     myel_im[myel_im != axon_myelin_pixel_values[1]] = 0
 
     # Define a disk-shaped structuring element with radius 2 for the dilation
     kernel = disk(2)
 
-    # Dilate the myelin regions using the defined kernel
+    # Dilate the myelin regions
     myel_im = cv2.dilate(myel_im, kernel)
 
     # Replace the expanded myelin areas back into the original segmented image
     seg_im[myel_im != 0] = axon_myelin_pixel_values[1]
+
+    # Process the axon regions
+    axon_im[axon_im != axon_myelin_pixel_values[0]] = 0  # Isolate axon pixels
+    axon_im = cv2.morphologyEx(axon_im, cv2.MORPH_CLOSE, kernel)  # Close small holes in axons
+
+    # Replace the processed axon areas back into the segmented image
+    seg_im[axon_im != 0] = axon_myelin_pixel_values[0]
 
     return seg_im
 
@@ -185,7 +192,7 @@ class NerveMorphometrics:
         # Filter axon properties based on criteria presented in the paper to exlude unrelevant nerve bundles
         self.filtered_props_df = {'Axon_filt': self.props_df['Axon_seg'][
             (self.props_df['Axon_seg']['eccentricity'] < 0.99) &
-            (self.props_df['Axon_seg']['solidity'] > 0.9) &
+            (self.props_df['Axon_seg']['solidity'] > 0.7) &
             (self.props_df['Axon_seg']['area_filled'] > 50) &
             (self.props_df['Axon_seg']['bbox-0'] != 0) &
             (self.props_df['Axon_seg']['bbox-1'] != 0) &

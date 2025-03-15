@@ -14,7 +14,7 @@ import nibabel as nib
 from PIL import Image
 from pathlib import Path
 from datetime import datetime
-from morphometrics_utils import NerveMorphometrics, expand_myelin
+from morphometrics_utils import NerveMorphometrics, expand_axon_and_myelin
 from natsort import natsorted
 
 from monai.data import DataLoader, CacheDataset
@@ -271,7 +271,7 @@ for image_name in range(0, len(files)):
         seg_im[(seg_im == 29) | (seg_im == 105)] = axon_myelin_pixel_values[1]
 
         # Expand myelin regions within the segmentation for accurate representation
-        seg_im = expand_myelin(seg_im, axon_myelin_pixel_values)
+        seg_im = expand_axon_and_myelin(seg_im, axon_myelin_pixel_values)
 
         # Create an object for morphometric analysis of the segmented nerve image
         nerve_morphs = NerveMorphometrics(seg_im, axon_myelin_pixel_values)
