@@ -39,7 +39,7 @@ Image.MAX_IMAGE_PIXELS = None
 single_file_iteration = False
 
 # Dataset identifier
-dataset = 'ppd_small'
+dataset = 'ppd_20250826'
 
 # Directory paths for raw data and other data related to the project
 root_dir = os.path.join(os.getcwd())  # Current working directory
@@ -51,7 +51,8 @@ data_dir = Path(os.path.join(root_dir, 'output', f'{dataset}'))  # Output data d
 inference_dir = Path(data_dir).joinpath('predictions')
 
 #methods paper model:
-proj_dir = os.path.join(root_dir, 'experiments', '221219_2144_bz10_patch512_lr1e-03_e1600_chan16-qp4096-1')
+# proj_dir = os.path.join(root_dir, 'experiments', '221219_2144_bz10_patch512_lr1e-03_e1600_chan16-qp4096-1')
+proj_dir = os.path.join(root_dir, 'experiments', '260119_1552_bz10_patch512_lr1e-03_e1600_chan16-qp4096_0_05-1')
 
 # new_model
 # proj_dir = os.path.join(root_dir, 'experiments', '231219_1346_bz10_patch512_lr1e-03_e1600_chan16-qp4096_0_05-1')
@@ -172,58 +173,61 @@ for image_name in files:
     print(f'Inference_dir == {inference_dir}..')
     # Skip processing if the transformed image already exists.
     if not Path(inference_dir.joinpath(f_name, f_name + '_trans.png')).exists():
-        # Prepare the image data for the test dataset.
-        set_files = [{"image": image_name}]
+        try:
+            # Prepare the image data for the test dataset.
+            set_files = [{"image": image_name}]
 
-        # CacheDataset is used to load and transform the data once at the beginning to speed up processing.
-        test_ds = CacheDataset(data=set_files, transform=test_transforms, cache_rate=1.0, num_workers=0)
-        # DataLoader is used to load the dataset into batches, here batch_size is 1 as we process images one by one.
-        test_loader = DataLoader(test_ds, batch_size=1, num_workers=0)
+            # CacheDataset is used to load and transform the data once at the beginning to speed up processing.
+            test_ds = CacheDataset(data=set_files, transform=test_transforms, cache_rate=1.0, num_workers=0)
+            # DataLoader is used to load the dataset into batches, here batch_size is 1 as we process images one by one.
+            test_loader = DataLoader(test_ds, batch_size=1, num_workers=0)
 
-        # Disable gradient calculations as we are only performing inference, not training.
-        with torch.no_grad():
-            # Loop through the dataset and perform inference on each image using the model.
-            for i, test_data in enumerate(test_loader):
-                # Extract patient ID from the metadata of the image.
-                pat_id = os.path.split(test_data['image_meta_dict']['filename_or_obj'][0])[1].split('_')[0]
-                print(f'processing pat_id: {pat_id}')
+            # Disable gradient calculations as we are only performing inference, not training.
+            with torch.no_grad():
+                # Loop through the dataset and perform inference on each image using the model.
+                for i, test_data in enumerate(test_loader):
+                    # Extract patient ID from the metadata of the image.
+                    pat_id = os.path.split(test_data['image_meta_dict']['filename_or_obj'][0])[1].split('_')[0]
+                    print(f'processing pat_id: {pat_id}')
 
-                # Set the size of the region of interest and batch size for the sliding window inference.
-                roi_size = (320, 320)
-                sw_batch_size = 4
+                    # Set the size of the region of interest and batch size for the sliding window inference.
+                    roi_size = (320, 320)
+                    sw_batch_size = 4
 
-                # Perform inference with the sliding window technique.
-                test_outputs = sliding_window_inference(
-                    test_data["image"].to(device),
-                    roi_size,
-                    sw_batch_size,
-                    model,
-                    overlap=0.5,
-                    mode='gaussian'
-                )
+                    # Perform inference with the sliding window technique.
+                    test_outputs = sliding_window_inference(
+                        test_data["image"].to(device),
+                        roi_size,
+                        sw_batch_size,
+                        model,
+                        overlap=0.5,
+                        mode='gaussian'
+                    )
 
-                # Apply post-processing transformations to the output of the model.
-                test_outputs = post_trans(test_outputs)
+                    # Apply post-processing transformations to the output of the model.
+                    test_outputs = post_trans(test_outputs)
 
-                # Save each output slice using the SaveImage utility.
-                for count, test_output in enumerate(test_outputs):
-                    name_dict = {'filename_or_obj': test_data["image_meta_dict"]['filename_or_obj'][count]}
-                    saver(test_output, name_dict)
+                    # Save each output slice using the SaveImage utility.
+                    for count, test_output in enumerate(test_outputs):
+                        name_dict = {'filename_or_obj': test_data["image_meta_dict"]['filename_or_obj'][count]}
+                        saver(test_output, name_dict)
 
-                    # CHECK FOR OS !!!!!
-                    f_name = name_dict['filename_or_obj'].split('/')[-1][:-7]
-                    file = str(inference_dir.joinpath(f_name, f_name + '_trans.png'))
-                    print('==========================================================================================')
-                    print(f'Inference_dir == {inference_dir}..')
-                    print(f'f_name = {f_name}')
-                    print(f'FILE == {file}..')
-                    print(f'name dict == {name_dict}..')
-                    print('==========================================================================================')
+                        # CHECK FOR OS !!!!!
+                        f_name = name_dict['filename_or_obj'].split('/')[-1][:-7]
+                        file = str(inference_dir.joinpath(f_name, f_name + '_trans.png'))
+                        print('==========================================================================================')
+                        print(f'Inference_dir == {inference_dir}..')
+                        print(f'f_name = {f_name}')
+                        print(f'FILE == {file}..')
+                        print(f'name dict == {name_dict}..')
+                        print('==========================================================================================')
 
-                    # Modify and save the image in the correct orientation and format.
-                    im = np.swapaxes(np.array(Image.open(file)), 0, 1)
-                    save_im = Image.fromarray((im * 255).astype("uint8")).convert('L')
-                    save_im.save(os.path.join(inference_dir, f"{f_name}.png"))
+                        # Modify and save the image in the correct orientation and format.
+                        im = np.swapaxes(np.array(Image.open(file)), 0, 1)
+                        save_im = Image.fromarray((im * 255).astype("uint8")).convert('L')
+                        save_im.save(os.path.join(inference_dir, f"{f_name}.png"))
+        except torch.cuda.OutOfMemoryError:
+            print(f'=============== skipping {f_name} due to OOM')
 
         # If only a single file iteration is required, break the loop.
         if single_file_iteration:

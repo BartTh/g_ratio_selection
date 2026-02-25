@@ -82,13 +82,16 @@ def expand_axon_and_myelin(seg_im, axon_myelin_pixel_values):
     kernel = disk(2)
 
     # Dilate the myelin regions
-    myel_im = cv2.dilate(myel_im, kernel)
+    # myel_im = cv2.dilate(myel_im, kernel)
 
     # Replace the expanded myelin areas back into the original segmented image
     seg_im[myel_im != 0] = axon_myelin_pixel_values[1]
 
     # Process the axon regions
     axon_im[axon_im != axon_myelin_pixel_values[0]] = 0  # Isolate axon pixels
+
+    # Define a disk-shaped structuring element with radius 2 for the dilation
+    kernel = disk(25)
     axon_im = cv2.morphologyEx(axon_im, cv2.MORPH_CLOSE, kernel)  # Close small holes in axons
 
     # Replace the processed axon areas back into the segmented image
@@ -191,8 +194,8 @@ class NerveMorphometrics:
 
         # Filter axon properties based on criteria presented in the paper to exlude unrelevant nerve bundles
         self.filtered_props_df = {'Axon_filt': self.props_df['Axon_seg'][
-            (self.props_df['Axon_seg']['eccentricity'] < 0.99) &
-            (self.props_df['Axon_seg']['solidity'] > 0.7) &
+            (self.props_df['Axon_seg']['eccentricity'] < 0.95) &
+            (self.props_df['Axon_seg']['solidity'] > 0.9) &
             (self.props_df['Axon_seg']['area_filled'] > 50) &
             (self.props_df['Axon_seg']['bbox-0'] != 0) &
             (self.props_df['Axon_seg']['bbox-1'] != 0) &
