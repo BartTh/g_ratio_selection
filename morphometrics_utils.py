@@ -1,12 +1,16 @@
+import time
+
 import cv2
 import numpy as np
 import pandas as pd
-from scipy.spatial.distance import cdist
 from skimage import util
-from skimage.morphology import disk
 import copy
 from skimage.measure import label, regionprops_table
 from monai.transforms import MapTransform
+from scipy.spatial import cKDTree
+from skimage.segmentation import watershed
+from skimage.morphology import binary_opening, disk
+from scipy import ndimage as ndi
 
 
 # class ConvertToMultiChanneld(MapTransform):
@@ -82,7 +86,7 @@ def expand_axon_and_myelin(seg_im, axon_myelin_pixel_values):
     kernel = disk(2)
 
     # Dilate the myelin regions
-    # myel_im = cv2.dilate(myel_im, kernel)
+    myel_im = cv2.dilate(myel_im, kernel)
 
     # Replace the expanded myelin areas back into the original segmented image
     seg_im[myel_im != 0] = axon_myelin_pixel_values[1]
@@ -163,7 +167,7 @@ class NerveMorphometrics:
         """
         self.props_df = {'Axon_seg': pd.DataFrame(), 'Myelin_seg': pd.DataFrame()}
         self.seg_im = seg_im
-        self.seg_im_selected = copy.deepcopy(seg_im)
+        self.seg_im_selected = copy.copy(seg_im)
         self.raw_label_img = {}
         self.filtered_props_df = {}
         self.final_df = {'Axon_seg': pd.DataFrame(), 'Myelin_seg': pd.DataFrame()}
@@ -179,18 +183,40 @@ class NerveMorphometrics:
             gt_im_selected: the labeled image of the axons and myelin in the ground truth image
             seg_im_selected: the labeled image of the axons and myelin in the segmented image
         """
-        for idx, label_id in enumerate(['Axon_seg', 'Myelin_seg']):
-            if 'seg' in label_id:
-                binary_im = np.zeros(self.seg_im.shape)
-                binary_im[self.seg_im == self.axon_myelin_pixel_values[idx]] = 1
+        # --- Axon ---
+        axon_mask = (self.seg_im == self.axon_myelin_pixel_values[0])
+        axon_lbl = label(axon_mask, connectivity=1)
+        self.raw_label_img['Axon_seg'] = axon_lbl
 
-            self.raw_label_img[label_id] = label(binary_im, connectivity=1)
+        props = regionprops_table(
+            axon_lbl,
+            properties=('label', 'centroid', 'eccentricity', 'bbox', 'solidity',
+                        'area_filled', 'equivalent_diameter_area')
+        )
+        self.props_df['Axon_seg'] = pd.DataFrame(props)
 
-            props = regionprops_table(self.raw_label_img[label_id],
-                                      properties=('label', 'centroid', 'eccentricity', 'bbox',
-                                                  'solidity', 'area_filled', 'equivalent_diameter_area'))
+        # --- Myelin (detach/split before labeling) ---
+        myelin_mask = (self.seg_im == self.axon_myelin_pixel_values[1])
 
-            self.props_df[label_id] = pd.DataFrame(props)
+        # (optional) break tiny bridges that connect rings
+        myelin_mask = binary_opening(myelin_mask, disk(2))
+
+        # distance inside myelin; watershed will split connected components
+        dist = ndi.distance_transform_edt(myelin_mask)
+
+        # use axon labels as markers (global) to partition myelin
+        markers = axon_lbl  # 0 = background, >0 = axon instances
+
+        myelin_lbl = watershed(-dist, markers=markers, mask=myelin_mask)
+
+        self.raw_label_img['Myelin_seg'] = myelin_lbl
+
+        props = regionprops_table(
+            myelin_lbl,
+            properties=('label', 'centroid', 'eccentricity', 'bbox', 'solidity',
+                        'area_filled', 'equivalent_diameter_area')
+        )
+        self.props_df['Myelin_seg'] = pd.DataFrame(props)
 
         # Filter axon properties based on criteria presented in the paper to exlude unrelevant nerve bundles
         self.filtered_props_df = {'Axon_filt': self.props_df['Axon_seg'][
@@ -218,17 +244,42 @@ class NerveMorphometrics:
         dict: A dictionary containing the filtered properties dataframe of the axon and myelin segments,
         with the myelin segments' CoM within the bounding box of the axon segments.
         """
-        # Find myelin CoM within axon seg bbox
-        for mye_index, mye_row in self.props_df['Myelin_seg'].iterrows():
-            for axon_idx, axon_row in self.filtered_props_df['Axon_filt'].iterrows():
-                if axon_row['bbox-0'] < mye_row['centroid-0'] < axon_row['bbox-2'] and \
-                        axon_row['bbox-1'] < mye_row['centroid-1'] < axon_row['bbox-3']:
-                    self.filtered_props_df['Myelin_seg'].append(mye_row)
-                    self.filtered_props_df['Axon_seg'].append(axon_row)
+        # Vectorized bbox containment
+        axon_df = self.filtered_props_df['Axon_filt'].reset_index(drop=True)
+        mye_df = self.props_df['Myelin_seg'].reset_index(drop=True)
 
-        # Create DataFrames from the filtered lists and reset indices
-        self.filtered_props_df['Myelin_seg'] = pd.DataFrame(self.filtered_props_df['Myelin_seg']).reset_index(drop=True)  # .drop_duplicates()
-        self.filtered_props_df['Axon_seg'] = pd.DataFrame(self.filtered_props_df['Axon_seg']).reset_index(drop=True)  # .drop_duplicates()
+        # sdf
+        import os
+        from pathlib import Path
+        from datetime import datetime
+
+        root_dir = os.path.join(os.getcwd())  # Current working directory
+        data_dir = Path(os.path.join(root_dir, 'output', f'ppd_20250826'))  # Output data directory
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        mye_df.to_csv(data_dir.joinpath("g_ratio_datafiles", f"{timestamp}.csv"))
+        # sdf
+
+        axon_bbox = axon_df[['bbox-0', 'bbox-1', 'bbox-2', 'bbox-3']].to_numpy()
+        mye_cent = mye_df[['centroid-0', 'centroid-1']].to_numpy()
+
+        axon_rows = []
+        mye_rows = []
+
+        # For each myelin centroid, find axons whose bbox contains it (vectorized per myelin)
+        for i in range(mye_cent.shape[0]):
+            c0, c1 = mye_cent[i]
+            inside = (
+                    (axon_bbox[:, 0] < c0) & (c0 < axon_bbox[:, 2]) &
+                    (axon_bbox[:, 1] < c1) & (c1 < axon_bbox[:, 3])
+            )
+            if inside.any():
+                idxs = np.flatnonzero(inside)
+                # keep all matches (same behavior as original)
+                axon_rows.extend(axon_df.iloc[idxs].to_dict('records'))
+                mye_rows.extend([mye_df.iloc[i].to_dict()] * len(idxs))
+
+        self.filtered_props_df['Axon_seg'] = pd.DataFrame(axon_rows).reset_index(drop=True)
+        self.filtered_props_df['Myelin_seg'] = pd.DataFrame(mye_rows).reset_index(drop=True)
 
         drop_non_closed_myelin = []
         # check for myelin endpoints and remove based on number of endpoints
@@ -256,45 +307,31 @@ class NerveMorphometrics:
             except KeyError:
                 return None
 
-        # Add column for bbox differences between axon and myelin
-        self.filtered_props_df['Axon_seg']['Vert_diff'] = None
-        self.filtered_props_df['Axon_seg']['Horz_diff'] = None
-        # ### Combine for seg
-        for axon_idx, axon_cent in enumerate(centroid_arrays['Axon_seg']):
-            closest_myelin = cdist([axon_cent], centroid_arrays['Myelin_seg'], 'euclidean').argmin()
-            distance = cdist([axon_cent], centroid_arrays['Myelin_seg'], 'euclidean').min()
-            if distance < max_com_distance:
+        # Nearest-neighbor match via KDTree + build DataFrames once
+        axon_cent = self.filtered_props_df['Axon_seg'][['centroid-0', 'centroid-1']].to_numpy()
+        mye_cent = self.filtered_props_df['Myelin_seg'][['centroid-0', 'centroid-1']].to_numpy()
 
-                # self.final_df['Axon_seg'] = self.final_df['Axon_seg'].append(
-                #     self.filtered_props_df['Axon_seg'].iloc[axon_idx])
+        tree = cKDTree(mye_cent)
+        dist, nn_idx = tree.query(axon_cent, k=1)
 
-                self.final_df['Axon_seg'] = pd.concat([self.final_df['Axon_seg'],
-                                                       pd.DataFrame([self.filtered_props_df['Axon_seg'].iloc[axon_idx]],
-                                                                    columns=self.filtered_props_df['Axon_seg'].columns)],
-                                                      ignore_index=True)
+        keep = dist < max_com_distance
+        keep_axon_idx = np.flatnonzero(keep)
+        keep_mye_idx = nn_idx[keep]
 
-                # self.final_df['Myelin_seg'] = self.final_df['Myelin_seg'].append(
-                #     self.filtered_props_df['Myelin_seg'].iloc[closest_myelin])
+        axon_sel = self.filtered_props_df['Axon_seg'].iloc[keep_axon_idx].copy().reset_index(drop=True)
+        mye_sel = self.filtered_props_df['Myelin_seg'].iloc[keep_mye_idx].copy().reset_index(drop=True)
 
-                self.final_df['Myelin_seg'] = pd.concat([self.final_df['Myelin_seg'],
-                                                         pd.DataFrame([self.filtered_props_df['Myelin_seg'].iloc[closest_myelin]],
-                                                                      columns=self.filtered_props_df['Myelin_seg'].columns)],
-                                                        ignore_index=True)
+        # Compute diffs vectorized
+        a_vert = (axon_sel['bbox-2'] - axon_sel['bbox-0']).to_numpy()
+        a_horz = (axon_sel['bbox-3'] - axon_sel['bbox-1']).to_numpy()
+        m_vert = (mye_sel['bbox-2'] - mye_sel['bbox-0']).to_numpy()
+        m_horz = (mye_sel['bbox-3'] - mye_sel['bbox-1']).to_numpy()
 
-                # Store length / width ratio for additional selection criteria
-                myel_row = self.final_df['Myelin_seg'].iloc[-1]
-                axon_row = self.final_df['Axon_seg'].iloc[-1]
+        axon_sel['Vert_diff'] = (a_vert / m_vert * 100).astype(int)
+        axon_sel['Horz_diff'] = (a_horz / m_horz * 100).astype(int)
 
-                a_vert = (axon_row['bbox-2'] - axon_row['bbox-0'])
-                a_horz = (axon_row['bbox-3'] - axon_row['bbox-1'])
-                m_vert = (myel_row['bbox-2'] - myel_row['bbox-0'])
-                m_horz = (myel_row['bbox-3'] - myel_row['bbox-1'])
-                # self.final_df['Axon_seg']['Vert_diff'].iloc[-1] = int(a_vert / m_vert * 100)
-                # self.final_df['Axon_seg']['Horz_diff'].iloc[-1] = int(a_horz / m_horz * 100)
-                self.final_df['Axon_seg'].loc[self.final_df['Axon_seg'].index[-1],  'Vert_diff'] = (
-                    int(a_vert / m_vert * 100))
-                self.final_df['Axon_seg'].loc[self.final_df['Axon_seg'].index[-1], 'Horz_diff'] = (
-                    int(a_horz / m_horz * 100))
+        self.final_df['Axon_seg'] = axon_sel
+        self.final_df['Myelin_seg'] = mye_sel
 
         # myelin_based_outliers = is_outlier(self.final_df['Axon_seg']['Vert_diff'].append(
         #     self.final_df['Axon_seg']['Horz_diff']))
