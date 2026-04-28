@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
-from ..pipeline.morphometrics_utils import ConvertToMultiChanneld
+from pipeline.morphometrics_utils import ConvertToMultiChanneld
 
 from monai.data import DataLoader, CacheDataset
 from monai.inferers import sliding_window_inference

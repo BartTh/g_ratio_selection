@@ -4,36 +4,51 @@
 
 This GitHub repository contains the code and data used for our research paper entitled _Automated Pipeline for Nerve Fiber Selection and G-Ratio Calculation in Optical Microscopy: Exploring Staining Protocol Variations_. 
 
-## **Content**
+## Repository Structure
 
-..
+```
+g_ratio_selection/
+├── src/
+│   ├── data/
+│   │   └── create_train_data.py          # Convert raw images to NIfTI for training
+│   ├── training/
+│   │   ├── train.py                      # Train the UNet segmentation model
+│   │   └── eval.py                       # Evaluate model performance on test set
+│   ├── pipeline/
+│   │   ├── morphometrics_pipeline.py     # Inference + g-ratio extraction (local)
+│   │   ├── morphometrics_pipeline_cluster.py  # Inference + g-ratio extraction (HPC)
+│   │   └── morphometrics_utils.py        # Segmentation transforms and morphometrics
+│   └── analysis/
+│       ├── group_compare_service.py      # Statistical group comparison and visualisation
+│       └── count_nerves_in_gt.py         # Count nerve structures in ground truth images
+└── tests/
+    └── test_data.py                      # Validate NIfTI label shape and integrity
+```
 
 ## Usage
 
-The pipeline consists of several scripts designed for different stages of the analysis:
+Scripts use relative imports and must be run as modules from the repository root:
 
-1. **Data Preparation**:
+```bash
+python -m src.data.create_train_data
+python -m src.training.train
+python -m src.training.eval
+python -m src.pipeline.morphometrics_pipeline
+```
 
-   - Use `create_train_data.py` to preprocess and format raw microscopy images for analysis.
+The pipeline stages in order:
 
-2. **Training**:
+1. **Data preparation** — `src/data/create_train_data.py`: converts raw JPG/PNG microscopy images and labels to NIfTI format (`.nii.gz`).
 
-   - Execute `train.py` to train the segmentation model on prepared datasets.
+2. **Training** — `src/training/train.py`: trains a 2D UNet (MONAI) on the prepared dataset with Dice loss and TensorBoard logging.
 
-3. **Inference and Analysis**:
+3. **Inference and analysis** — `src/pipeline/morphometrics_pipeline.py`: runs sliding-window segmentation on new images and extracts per-fibre morphometrics and g-ratios. Use `morphometrics_pipeline_cluster.py` on HPC environments.
 
-   - Run `morphometrics_pipeline.py` (`morphometrics_pipeline_cluster.py` with additional verbose feedback for cluster environment) to perform segmentation on new images and extract morphometric data.
+4. **Evaluation** — `src/training/eval.py`: computes Dice and accuracy metrics against ground truth labels.
 
-4. **Evaluation**:
+5. **Group comparison** — `src/analysis/group_compare_service.py`: statistical comparison of g-ratio metrics across experimental groups with Tukey HSD correction.
 
-   - Utilize `eval.py` to assess the performance of the segmentation model against ground truth data.
-     
-5. **Utility Scripts**:
-
-   - `count_nerves_in_gt.py`: Counts the number of nerve structures in ground truth images.
-   - `test.py`: Contains test functions for validating data integrity.
-
-**Note**: Detailed instructions and parameter configurations for each script are provided within the scripts themselves. It's recommended to review and adjust these parameters based on your specific dataset and research requirements.
+**Note**: Dataset paths and model experiment names are configured directly within each script. Review and adjust these before running.
 
 ## **Citation**
 
