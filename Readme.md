@@ -38,7 +38,7 @@ python -m src.pipeline.morphometrics_pipeline
 
 The pipeline stages in order:
 
-1. **Data preparation** — `src/data/create_train_data.py`: converts raw JPG/PNG microscopy images and labels to NIfTI format (`.nii.gz`).
+1. **Data preparation** — `src/data/create_train_data.py`: converts raw JPG/PNG microscopy export images (QuPath exportqup) and labels to NIfTI format (`.nii.gz`).
 
 2. **Training** — `src/training/train.py`: trains a 2D UNet (MONAI) on the prepared dataset with Dice loss and TensorBoard logging.
 
@@ -46,7 +46,7 @@ The pipeline stages in order:
 
 4. **Evaluation** — `src/training/eval.py`: computes Dice and accuracy metrics against ground truth labels.
 
-5. **Group comparison** — `src/analysis/group_compare_service.py`: statistical comparison of g-ratio metrics across experimental groups with Tukey HSD correction.
+5. **Group comparison** — `src/analysis/group_compare.py`: statistical comparison of g-ratio metrics across experimental groups with Tukey HSD correction.
 
 **Note**: Dataset paths and model experiment names are configured directly within each script. Review and adjust these before running.
 
