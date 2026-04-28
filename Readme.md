@@ -38,24 +38,14 @@ python -m src.pipeline.morphometrics_pipeline
 
 The pipeline stages in order:
 
-1. **Data preparation** — `src/data/create_train_data.py`: converts raw JPG/PNG microscopy export images (QuPath exportqup) and labels to NIfTI format (`.nii.gz`).
+1. **QuPath export** — run the QuPath script within QuPath to export tile images and labels from the whole-slide image. Then run `combine_tiles.py` to merge the exported tiles into the input format expected by the next step.
 
-2. **Training** — `src/training/train.py`: trains a 2D UNet (MONAI) on the prepared dataset with Dice loss and TensorBoard logging.
+2. **Data preparation** — `src/data/create_train_data.py`: converts the combined JPG/PNG tile images and labels to NIfTI format (`.nii.gz`).
 
-3. **Inference and analysis** — `src/pipeline/morphometrics_pipeline.py`: runs sliding-window segmentation on new images and extracts per-fibre morphometrics and g-ratios. Use `morphometrics_pipeline_cluster.py` on HPC environments.
+3. **Training** — `src/training/train.py`: trains a 2D UNet (MONAI) on the prepared dataset with Dice loss and TensorBoard logging.
 
-4. **Evaluation** — `src/training/eval.py`: computes Dice and accuracy metrics against ground truth labels.
+4. **Inference and analysis** — `src/pipeline/morphometrics_pipeline.py`: runs sliding-window segmentation on new images and extracts per-fibre morphometrics and g-ratios. Use `morphometrics_pipeline_cluster.py` on HPC environments.
 
 5. **Group comparison** — `src/analysis/group_compare.py`: statistical comparison of g-ratio metrics across experimental groups with Tukey HSD correction.
 
 **Note**: Dataset paths and model experiment names are configured directly within each script. Review and adjust these before running.
-
-## **Citation**
-
-If you use any part of the contents of this repository in your own work, please cite our paper:
-
-Thomson, Bart R., et al. "Automated pipeline for nerve fiber selection and g-ratio calculation in optical microscopy: exploring staining protocol variations." Frontiers in Neuroanatomy 17 (2023): 1260186.
-
-## **Contact**
-
-If you have any questions or comments about this repository, please contact us at bart.thomson@uzh.ch.
