@@ -29,13 +29,6 @@ g_ratio_selection/
 
 Scripts use relative imports and must be run as modules from the repository root:
 
-```bash
-python -m src.data.create_train_data
-python -m src.training.train
-python -m src.training.eval
-python -m src.pipeline.morphometrics_pipeline
-```
-
 The pipeline stages in order:
 
 1. **QuPath export** — run the QuPath script within QuPath to export tile images and labels from the whole-slide image. Then run `combine_tiles.py` to merge the exported tiles into the input format expected by the next step.
